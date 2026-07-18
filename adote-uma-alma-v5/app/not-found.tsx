@@ -1,17 +1,20 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center px-4 text-center">
-      <p className="text-sm font-semibold uppercase tracking-wide text-brand-500">Erro 404</p>
-      <h1 className="mt-2 text-3xl font-bold text-brand-900">Página não encontrada</h1>
-      <p className="mt-3 max-w-md text-brand-600">
+    <div className="flex min-h-screen flex-col items-center justify-center text-center px-6">
+      <h1 className="text-5xl font-bold">404</h1>
+
+      <p className="mt-4 text-muted-foreground">
         A página que procura pode ter sido movida ou já não existe.
       </p>
-      <Button className="mt-6" asChild={false}>
-        <Link href="/">Voltar ao início</Link>
-      </Button>
+
+      <Link href="/">
+        <Button className="mt-6">
+          Voltar ao início
+        </Button>
+      </Link>
     </div>
   );
 }
