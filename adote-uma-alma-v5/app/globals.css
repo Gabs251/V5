@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-brand-50 text-brand-900 antialiased;
+}
+
+::selection {
+  @apply bg-brand-300/50;
+}
+
+.focus-ring {
+  @apply outline-none ring-2 ring-brand-400 ring-offset-2 ring-offset-brand-50;
+}
+
+.container-page {
+  @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+}

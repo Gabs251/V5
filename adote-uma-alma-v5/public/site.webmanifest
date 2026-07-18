@@ -1,0 +1,10 @@
+{
+  "name": "Adote uma Alma",
+  "short_name": "Adote uma Alma",
+  "description": "Ajude alguém a participar do Encontro com Deus Redenção.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#faf6f1",
+  "theme_color": "#6b4a2e",
+  "icons": []
+}
