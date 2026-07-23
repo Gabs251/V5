@@ -51,6 +51,16 @@ export async function POST(request: Request) {
     const donorName = session.metadata?.donor_name || "Doação Stripe";
     const amountCents = session.amount_total ?? 0;
 
+    // Moeda do pagamento (multimoeda com taxa fixa 110 € = 635 R$).
+    const sessionCurrency = (session.currency ?? "").toUpperCase();
+    const currency =
+      session.metadata?.currency === "BRL" || sessionCurrency === "BRL"
+        ? "BRL"
+        : "EUR";
+
+    const donorEmail =
+      session.customer_details?.email ?? session.customer_email ?? null;
+
     const paymentIntent =
       typeof session.payment_intent === "string"
         ? session.payment_intent
@@ -68,12 +78,17 @@ export async function POST(request: Request) {
         .maybeSingle();
 
       if (!existing) {
+        // A migração 0003 faz o trigger disparar também em INSERT, pelo que
+        // esta inserção atualiza automaticamente o valor arrecadado da alma.
         const { error } = await supabase
           .from("contributions")
           .insert({
             soul_id: soulId,
             donor_name: donorName,
+            donor_email: donorEmail,
             amount_cents: amountCents,
+            currency: currency,
+            payment_method: "card",
             status: "confirmada",
             stripe_payment_intent: paymentIntent,
             admin_note: "Stripe: " + session.id,

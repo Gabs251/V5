@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getSoulById } from "@/lib/data";
+import type { Currency } from "@/lib/types";
 
 function emailValid(value: string): boolean {
   const at = value.indexOf("@");
@@ -24,6 +25,8 @@ export async function POST(request: Request) {
   const email = typeof body?.email === "string" ? body.email.trim() : "";
   const phone = typeof body?.phone === "string" ? body.phone.trim() : "";
   const amountCents = Number.isInteger(body?.amount_cents) ? body.amount_cents : 0;
+  // Moeda escolhida pelo doador (multimoeda com taxa fixa 110 € = 635 R$).
+  const currency: Currency = body?.currency === "BRL" ? "BRL" : "EUR";
 
   if (!soulId || donorName.length < 2 || amountCents < 100 || amountCents > 1000000) {
     return NextResponse.json({ error: "Dados inválidos." }, { status: 400 });
@@ -47,7 +50,7 @@ export async function POST(request: Request) {
     line_items: [
       {
         price_data: {
-          currency: "eur",
+          currency: currency.toLowerCase(),
           product_data: {
             name: "Adote uma Alma — Alma #" + soul.code,
             description: "Contribuição para o Encontro com Deus Redenção",
@@ -57,7 +60,7 @@ export async function POST(request: Request) {
         quantity: 1,
       },
     ],
-    metadata: { soul_id: soulId, donor_name: donorName, phone: phone },
+    metadata: { soul_id: soulId, donor_name: donorName, phone: phone, currency: currency },
     success_url: siteUrl + "/obrigado",
     cancel_url: siteUrl + "/adote-uma-alma",
   });

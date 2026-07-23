@@ -5,6 +5,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { formatCurrency, calcPercentage } from "@/lib/utils";
+import { formatCents, fromEurCents } from "@/lib/currency";
 import type { Soul } from "@/lib/types";
 import { AdoptModal } from "@/components/site/AdoptModal";
 
@@ -43,7 +44,10 @@ export function SoulCard({ soul }: { soul: Soul }) {
             <span className="font-semibold text-brand-800">
               {formatCurrency(soul.raised_cents / 100)}
             </span>
-            <span className="text-brand-500">de {formatCurrency(soul.goal_cents / 100)}</span>
+            <span className="text-brand-500">
+              de {formatCurrency(soul.goal_cents / 100)} /{" "}
+              {formatCents(fromEurCents(soul.goal_cents, "BRL"), "BRL")}
+            </span>
           </div>
           <ProgressBar percentage={percentage} />
           <p className="mt-1 text-right text-xs font-medium text-brand-500">{percentage}%</p>
