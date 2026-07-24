@@ -24,8 +24,8 @@ export default function ContatoPage() {
           <div className="flex items-center gap-3 rounded-xl2 border border-brand-100 bg-white p-5 shadow-soft">
             <Phone className="h-5 w-5 shrink-0 text-brand-500" aria-hidden />
             <div>
-              <a href="tel:+351965012201" className="font-medium text-brand-700 hover:text-brand-900">
-                +351 965 012 201
+              <a href="tel:+351922262241" className="font-medium text-brand-700 hover:text-brand-900">
+                +351 922 262 241
               </a>
               <p className="text-xs text-brand-400">Telefone / MBWay</p>
             </div>
