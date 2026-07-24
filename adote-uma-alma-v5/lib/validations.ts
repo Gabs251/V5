@@ -13,6 +13,24 @@ export const contributionSchema = z.object({
 
 export type ContributionInput = z.infer<typeof contributionSchema>;
 
+// Contribuição PIX submetida pelo doador após efetuar o pagamento.
+// Fica pendente de aprovação pelo administrador — nada é contabilizado
+// automaticamente.
+export const pixContributionSchema = z.object({
+  soul_id: z.string().uuid(),
+  donor_name: z.string().min(2, "Indique o seu nome.").max(120),
+  donor_email: z.string().email("Indique um email válido."),
+  currency: z.enum(["eur", "brl"]),
+  // Valor na moeda escolhida (em centavos dessa moeda).
+  amount_cents: z
+    .number()
+    .int()
+    .min(100, "Indique um valor válido.")
+    .max(100000000, "Valor demasiado elevado."),
+});
+
+export type PixContributionInput = z.infer<typeof pixContributionSchema>;
+
 export const contactSchema = z.object({
   name: z.string().min(2, "Indique o seu nome."),
   email: z.string().email("Indique um email válido."),

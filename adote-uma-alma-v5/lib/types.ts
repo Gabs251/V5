@@ -1,5 +1,7 @@
 export type SoulStatus = "disponivel" | "adotada" | "arquivada";
 export type ContributionStatus = "pendente" | "confirmada" | "rejeitada";
+export type ContributionCurrency = "eur" | "brl";
+export type ContributionPaymentMethod = "mbway" | "card" | "pix";
 
 export interface Soul {
   id: string;
@@ -20,8 +22,13 @@ export interface Contribution {
   id: string;
   soul_id: string;
   donor_name: string;
+  donor_email: string | null;
   amount_cents: number;
+  original_amount_cents: number;
+  currency: ContributionCurrency;
+  payment_method: ContributionPaymentMethod;
   proof_url: string | null;
+  stripe_session_id: string | null;
   status: ContributionStatus;
   admin_note: string | null;
   created_at: string;

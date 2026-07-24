@@ -2,14 +2,20 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Upload, Check, Copy, CreditCard, Smartphone, Loader2, Lock } from "lucide-react";
+import { X, Upload, Check, Copy, CreditCard, Smartphone, QrCode, Loader2, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, FieldError } from "@/components/ui/Input";
-import { formatCurrency, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { formatMoney, type Currency, PIX_KEY } from "@/lib/currency";
 import type { Soul } from "@/lib/types";
 
-const presetAmounts = [5, 10, 20, 30, 50, 100];
+// Valores predefinidos por moeda (mesma escala de contribuição em cada moeda).
+const presetsByCurrency: Record<Currency, number[]> = {
+  EUR: [5, 10, 20, 30, 50, 100],
+  BRL: [25, 50, 100, 200, 300, 635],
+};
+
 const MBWAY_NUMBER = process.env.NEXT_PUBLIC_MBWAY_NUMBER ?? "+351 932 849 338";
 
 const countries = [
@@ -30,7 +36,7 @@ const countries = [
   "Outro",
 ];
 
-type Step = "valor" | "metodo" | "mbway" | "comprovativo" | "cartao" | "sucesso";
+type Step = "valor" | "metodo" | "mbway" | "comprovativo" | "cartao" | "pix" | "pixForm" | "sucesso";
 
 interface CardForm {
   name: string;
@@ -102,6 +108,7 @@ function emailValid(value: string): boolean {
 
 export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void }) {
   const [step, setStep] = useState<Step>("valor");
+  const [currency, setCurrency] = useState<Currency>("EUR");
   const [amount, setAmount] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState("");
   const [donorName, setDonorName] = useState("");
@@ -109,6 +116,8 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pixCopied, setPixCopied] = useState(false);
+  const [pixForm, setPixForm] = useState({ name: "", email: "" });
   const [card, setCard] = useState<CardForm>({
     name: "",
     email: "",
@@ -122,7 +131,18 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
   });
   const [cardErrors, setCardErrors] = useState<Partial<Record<keyof CardForm, string>>>({});
 
+  const presetAmounts = presetsByCurrency[currency];
   const finalAmount = amount ?? Number(customAmount) ?? 0;
+
+  function fmt(value: number): string {
+    return formatMoney(value, currency);
+  }
+
+  function selectCurrency(next: Currency) {
+    setCurrency(next);
+    setAmount(null);
+    setCustomAmount("");
+  }
 
   function selectAmount(value: number) {
     setAmount(value);
@@ -141,6 +161,16 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // clipboard indisponível — o número continua visível para cópia manual
+    }
+  }
+
+  async function copyPixKey() {
+    try {
+      await navigator.clipboard.writeText(PIX_KEY);
+      setPixCopied(true);
+      setTimeout(() => setPixCopied(false), 2000);
+    } catch {
+      // clipboard indisponível — a chave continua visível para cópia manual
     }
   }
 
@@ -173,6 +203,7 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
           email: card.email,
           phone: card.phone || null,
           amount_cents: Math.round(finalAmount * 100),
+          currency: currency,
         }),
       });
       const body = await response.json().catch(() => ({}));
@@ -182,6 +213,47 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
       window.location.href = body.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ocorreu um erro inesperado.");
+      setSubmitting(false);
+    }
+  }
+
+  async function submitPix(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (pixForm.name.trim().length < 2) {
+      setError("Indique o seu nome.");
+      return;
+    }
+    if (!emailValid(pixForm.email)) {
+      setError("Indique um email válido.");
+      return;
+    }
+    if (!finalAmount || finalAmount < 1) {
+      setError("Indique um valor válido.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/pix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          soul_id: soul.id,
+          donor_name: pixForm.name,
+          email: pixForm.email,
+          amount_cents: Math.round(finalAmount * 100),
+          currency: currency,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error ?? "Não foi possível registar a contribuição.");
+      }
+      setDonorName(pixForm.name);
+      setStep("sucesso");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ocorreu um erro inesperado.");
+    } finally {
       setSubmitting(false);
     }
   }
@@ -273,7 +345,39 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
           {step === "valor" && (
             <div>
               <h2 className="text-xl font-semibold text-brand-900">Investir na Alma #{soul.code}</h2>
-              <p className="mt-1 text-sm text-brand-600">Escolha o valor da sua contribuição.</p>
+              <p className="mt-1 text-sm text-brand-600">Escolha a moeda e o valor da sua contribuição.</p>
+
+              <div className="mt-5">
+                <Label htmlFor="currency-eur">Moeda</Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    id="currency-eur"
+                    type="button"
+                    onClick={() => selectCurrency("EUR")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 rounded-lg border py-3 text-sm font-semibold transition-colors focus-ring",
+                      currency === "EUR"
+                        ? "border-brand-600 bg-brand-600 text-white"
+                        : "border-brand-200 text-brand-700 hover:bg-brand-100"
+                    )}
+                  >
+                    <span aria-hidden>🇪🇺</span> Euro (€)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => selectCurrency("BRL")}
+                    className={cn(
+                      "flex items-center justify-center gap-2 rounded-lg border py-3 text-sm font-semibold transition-colors focus-ring",
+                      currency === "BRL"
+                        ? "border-brand-600 bg-brand-600 text-white"
+                        : "border-brand-200 text-brand-700 hover:bg-brand-100"
+                    )}
+                  >
+                    <span aria-hidden>🇧🇷</span> Real (R$)
+                  </button>
+                </div>
+              </div>
+
               <div className="mt-6 grid grid-cols-3 gap-3">
                 {presetAmounts.map((value) => (
                   <button
@@ -286,18 +390,20 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
                         : "border-brand-200 text-brand-700 hover:bg-brand-100"
                     )}
                   >
-                    {value}€
+                    {fmt(value)}
                   </button>
                 ))}
               </div>
               <div className="mt-4">
-                <Label htmlFor="custom-amount">Outro valor (€)</Label>
+                <Label htmlFor="custom-amount">
+                  Outro valor ({currency === "EUR" ? "€" : "R$"})
+                </Label>
                 <Input
                   id="custom-amount"
                   type="number"
                   min={1}
                   step="0.01"
-                  placeholder="Ex: 25"
+                  placeholder={currency === "EUR" ? "Ex: 25" : "Ex: 150"}
                   value={customAmount}
                   onChange={(e) => {
                     setCustomAmount(e.target.value);
@@ -319,7 +425,7 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
             <div>
               <h2 className="text-xl font-semibold text-brand-900">Método de pagamento</h2>
               <p className="mt-1 text-sm text-brand-600">
-                Valor: <strong>{formatCurrency(finalAmount)}</strong> — escolha como quer contribuir.
+                Valor: <strong>{fmt(finalAmount)}</strong> — escolha como quer contribuir.
               </p>
               <div className="mt-6 space-y-3">
                 <button
@@ -329,7 +435,7 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
                 >
                   <Smartphone className="h-6 w-6 shrink-0 text-brand-500" aria-hidden />
                   <span>
-                    <span className="block font-semibold text-brand-900">MB WAY</span>
+                    <span className="block font-semibold text-brand-900">Cartão / MB WAY</span>
                     <span className="block text-sm text-brand-600">
                       Transferência direta com comprovativo
                     </span>
@@ -346,6 +452,19 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
                     <span className="block text-sm text-brand-600">Pagamento seguro via Stripe</span>
                   </span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setStep("pix")}
+                  className="flex w-full items-center gap-3 rounded-xl2 border border-brand-200 p-4 text-left transition-colors hover:border-brand-400 hover:bg-brand-50 focus-ring"
+                >
+                  <QrCode className="h-6 w-6 shrink-0 text-brand-500" aria-hidden />
+                  <span>
+                    <span className="block font-semibold text-brand-900">PIX</span>
+                    <span className="block text-sm text-brand-600">
+                      Pagamento instantâneo (Brasil)
+                    </span>
+                  </span>
+                </button>
               </div>
             </div>
           )}
@@ -354,7 +473,7 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
             <div className="text-center">
               <h2 className="text-xl font-semibold text-brand-900">Pagamento via MB WAY</h2>
               <p className="mt-1 text-sm text-brand-600">
-                Valor a contribuir: <strong>{formatCurrency(finalAmount)}</strong>
+                Valor a contribuir: <strong>{fmt(finalAmount)}</strong>
               </p>
               <p className="mt-6 text-sm text-brand-600">Envie o valor para o número MB WAY:</p>
               <div className="mx-auto mt-3 flex max-w-xs items-center justify-center gap-2 rounded-xl2 border border-brand-200 bg-brand-50 px-4 py-4">
@@ -375,11 +494,102 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
             </div>
           )}
 
+          {step === "pix" && (
+            <div className="text-center">
+              <h2 className="text-xl font-semibold text-brand-900">Pagamento via PIX</h2>
+              <p className="mt-1 text-sm text-brand-600">
+                Valor a contribuir: <strong>{fmt(finalAmount)}</strong>
+              </p>
+              <p className="mt-6 text-sm text-brand-600">Faça o PIX para a chave:</p>
+              <div className="mx-auto mt-3 flex max-w-xs items-center justify-center gap-2 rounded-xl2 border border-brand-200 bg-brand-50 px-4 py-4">
+                <span className="text-lg font-bold tracking-wide text-brand-800">{PIX_KEY}</span>
+                <button
+                  type="button"
+                  onClick={copyPixKey}
+                  aria-label="Copiar chave PIX"
+                  className="rounded-full p-2 text-brand-500 transition-colors hover:bg-brand-100 hover:text-brand-800 focus-ring"
+                >
+                  {pixCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+              <Button variant="secondary" className="mt-3 w-full" onClick={copyPixKey}>
+                <Copy className="h-4 w-4" /> Copiar chave PIX
+              </Button>
+              {pixCopied && (
+                <p className="mt-2 text-sm font-medium text-emerald-600">Chave PIX copiada.</p>
+              )}
+              <Button className="mt-6 w-full" onClick={() => setStep("pixForm")}>
+                Já realizei o pagamento
+              </Button>
+            </div>
+          )}
+
+          {step === "pixForm" && (
+            <form onSubmit={submitPix}>
+              <h2 className="text-xl font-semibold text-brand-900">Confirmar pagamento PIX</h2>
+              <p className="mt-1 text-sm text-brand-600">
+                A sua contribuição será validada pela nossa equipa antes de ser contabilizada.
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <Label htmlFor="pix-name">Nome</Label>
+                  <Input
+                    id="pix-name"
+                    value={pixForm.name}
+                    onChange={(e) => setPixForm((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="Nome completo"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="pix-email">Email</Label>
+                  <Input
+                    id="pix-email"
+                    type="email"
+                    value={pixForm.email}
+                    onChange={(e) => setPixForm((p) => ({ ...p, email: e.target.value }))}
+                    placeholder="o.seu@email.com"
+                    required
+                  />
+                </div>
+                <div className="rounded-lg border border-brand-100 bg-brand-50 px-4 py-3 text-sm text-brand-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-brand-500">Valor</span>
+                    <span className="font-semibold text-brand-800">{fmt(finalAmount)}</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-brand-500">Moeda</span>
+                    <span className="font-semibold text-brand-800">
+                      {currency === "EUR" ? "Euro (€)" : "Real (R$)"}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between">
+                    <span className="text-brand-500">Alma</span>
+                    <span className="font-semibold text-brand-800">#{soul.code}</span>
+                  </div>
+                </div>
+              </div>
+
+              <FieldError message={error ?? undefined} />
+
+              <Button type="submit" className="mt-6 w-full" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> A enviar...
+                  </>
+                ) : (
+                  "Enviar para confirmação"
+                )}
+              </Button>
+            </form>
+          )}
+
           {step === "cartao" && (
             <div>
               <h2 className="text-xl font-semibold text-brand-900">Pagamento com cartão</h2>
               <p className="mt-1 text-sm text-brand-600">
-                Valor: <strong>{formatCurrency(finalAmount)}</strong>
+                Valor: <strong>{fmt(finalAmount)}</strong>
               </p>
 
               <div className="mt-5 space-y-4">
@@ -517,7 +727,7 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-4 w-4" /> Pagar {formatCurrency(finalAmount)}
+                    <CreditCard className="h-4 w-4" /> Pagar {fmt(finalAmount)}
                   </>
                 )}
               </Button>
@@ -588,7 +798,7 @@ export function AdoptModal({ soul, onClose }: { soul: Soul; onClose: () => void 
               </div>
               <h2 className="text-xl font-semibold text-brand-900">Obrigado, {donorName}!</h2>
               <p className="mt-2 text-sm leading-relaxed text-brand-600">
-                A sua contribuição de {formatCurrency(finalAmount)} foi registada e está a
+                A sua contribuição de {fmt(finalAmount)} foi registada e está a
                 aguardar confirmação da nossa equipa. Assim que for validada, o progresso da
                 Alma #{soul.code} será atualizado.
               </p>

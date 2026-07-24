@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Soul, TransparencyTotals } from "@/lib/types";
+import { toEurCents } from "@/lib/currency";
+import type { Currency, Soul, TransparencyTotals } from "@/lib/types";
 
 // Almas apresentadas enquanto a base de dados não devolve registos.
 export const FALLBACK_SOULS: Soul[] = [
@@ -133,16 +134,18 @@ export async function getConfirmedContributions(limit = 50): Promise<ConfirmedCo
     const supabase = await createClient();
     const { data, error } = await supabase
       .from("contributions")
-      .select("donor_name, amount_cents, created_at, souls(code)")
+      .select("donor_name, amount_cents, currency, created_at, souls(code)")
       .eq("status", "confirmada")
       .order("created_at", { ascending: false })
       .limit(limit);
 
     if (error || !data) return [];
-    return (data as unknown as Array<{ donor_name: string; amount_cents: number; created_at: string; souls: { code: string } | null }>).map(
+    return (data as unknown as Array<{ donor_name: string; amount_cents: number; currency: Currency | null; created_at: string; souls: { code: string } | null }>).map(
       (row) => ({
         donor_name: row.donor_name,
-        amount_cents: row.amount_cents,
+        // Contribuições em BRL são apresentadas em euros à taxa fixa do projeto
+        // (110 € = 635 R$), para manter a transparência numa única moeda base.
+        amount_cents: toEurCents(row.amount_cents, row.currency ?? "EUR"),
         created_at: row.created_at,
         soul_code: row.souls?.code ?? null,
       })
